@@ -14,9 +14,9 @@
 #   make clean
 #
 
-LLVM_DIR     := /home/nick/research/llvm-3.9.cmake/bin/
+LLVM_DIR     := /Users/cmk/llvm/bin/
 PATHPROFILER := ../obj/bin/pathprofiler
-CLANG        := $(LLVM_DIR)clang
+CLANG        := $(LLVM_DIR)clang-3.9
 OPT          := $(LLVM_DIR)opt
 RM           := /bin/rm
 CAT          := /bin/cat
