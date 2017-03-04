@@ -13,6 +13,13 @@
 namespace pathprofiling {
 
 
+#define EPPID "PaThPrOfIlInG_ID"
+
+
+// return true if there are back edges
+bool countPaths (llvm::DenseMap<llvm::BasicBlock*, uint64_t>& out, llvm::LoopInfo& info, llvm::Function& function);
+
+
 struct PathEncodingPass : public llvm::ModulePass {
   using Edge = std::pair<llvm::BasicBlock*, llvm::BasicBlock*>;
 

@@ -6,17 +6,29 @@
 extern "C" {
 
 
-// This macro allows us to prefix strings so that they are less likely to
-// conflict with existing symbol names in the examined programs.
-// e.g. EPP(entry) yields PaThPrOfIlInG_entry
 #define EPP(X)  PaThPrOfIlInG_ ## X
 
+extern uint64_t EPP(paths)[];
 
+extern uint64_t EPP(nPaths);
 
-// Implement your instrumentation functions here. You will probably need at
-// least one function to log completed paths and one function to save the
-// results to a file. You may wish to have others.
+// arguments are supplied during instrumentation
+void
+EPP(count) (uint64_t funcid, uint64_t pathid) {
+	EPP(paths)[funcid+pathid]++;
+}
 
+void
+EPP(print) (void) {
+	FILE* oFile;
+	oFile = fopen("path-profile-results", "w");
+	if (NULL != oFile) {
+		for (uint64_t i = 0; i < EPP(nPaths); i++) {
+			fprintf(oFile, "%llu,%llu\n", i, EPP(paths)[i]);
+		}
+		fclose(oFile);
+	}
+}
 
 
 }

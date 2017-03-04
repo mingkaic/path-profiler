@@ -41,8 +41,15 @@ printPath(llvm::raw_ostream& out, std::vector<llvm::BasicBlock*>& blocks) {
 
 bool
 ProfileDecodingPass::runOnModule(Module &module) {
-  // Implement your solution here.
-  return false;
+  for (auto& f : module)
+  {
+    if (!f.isDeclaration())
+    {
+//      decode(f);
+    }
+  }
+
+  return true;
 }
 
 
@@ -51,6 +58,7 @@ ProfileDecodingPass::decode(llvm::Function* function, uint64_t pathID) {
   std::vector<llvm::BasicBlock*> sequence;
   // You may want to implement and use this function as a part of your
   // solution.
+  // todo: decode
   return sequence;
 }
 
