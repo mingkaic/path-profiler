@@ -15,6 +15,8 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
+// todo: remove
 #include <iostream>
 
 
@@ -50,21 +52,33 @@ bool pathprofiling::countPaths (llvm::DenseMap<llvm::BasicBlock*, uint64_t>& out
 
   bool backedged = false;
   std::vector<BasicBlock*> entrances;
-  while (!preds.empty())
+  while (false == backedged && !preds.empty())
   {
     BasicBlock* b = preds.front();
     preds.pop_front();
     if (visited.end() == visited.find(b))
     {
-      visited.insert(b);
-
       auto* ll = info.getLoopFor(b);
-      for (auto succ : successors(b))
-      {
-        size_t succ_count = out.find(
-                static_cast<BasicBlock*>(succ))->second;
-        out[b] += succ_count;
-      }
+
+	  // only sum up successors if they've all been visited
+	  if (std::all_of(succ_begin(b), succ_end(b),
+	  [&visited](BasicBlock* s)
+	  {
+	    return visited.end() != visited.find(s);
+	  }))
+	  {
+        for (auto succ : successors(b))
+        {
+          size_t succ_count = out.find(
+            static_cast<BasicBlock*>(succ))->second;
+          out[b] += succ_count;
+        }
+        visited.insert(b);
+	  }
+	  else
+	  {
+	  	preds.push_back(b);
+	  }
       for (auto pred : predecessors(b))
       {
         BasicBlock* p = static_cast<BasicBlock*>(pred);
@@ -81,6 +95,8 @@ bool pathprofiling::countPaths (llvm::DenseMap<llvm::BasicBlock*, uint64_t>& out
       }
     }
   }
+//for (auto& bb : function) { std::cout << out[&bb] << " "; }
+//std::cout << "\n";
   return backedged;
 }
 
@@ -115,11 +131,22 @@ PathEncodingPass::encode(llvm::Function& function) {
   ArrayType* idTy = ArrayType::get(int64Ty, 1);
   AllocaInst* id;
   {
-    IRBuilder<> builder(function.getEntryBlock().getFirstNonPHI());
+  	Instruction* first = function.getEntryBlock().getFirstNonPHI();
+    IRBuilder<> builder(first);
     id = builder.CreateAlloca(idTy, nullptr, EPPID);
     auto* gep = builder.CreateInBoundsGEP(int64Ty, id, zero);
     builder.CreateStore(zero, gep);
   }
+
+  // order basic blocks by their path count DESC
+  // this accounts for multiple successors (>2) like switch, or try catches
+  std::priority_queue<BasicBlock*,
+     std::vector<BasicBlock*>,
+     std::function<bool(BasicBlock*, BasicBlock*)> > countorder(
+     [this](BasicBlock* lhs, BasicBlock* rhs) -> bool
+	 {
+	   return numPaths[lhs] > numPaths[rhs];
+	 });
 
   // encode by topographical order to ensure deterministic decoding
   for (auto& bb : function)
@@ -127,30 +154,31 @@ PathEncodingPass::encode(llvm::Function& function) {
     if (!llvm::succ_empty(&bb))
     {
       // get the successor of minimum number of paths
-      auto it = succ_begin(&bb);
-      BasicBlock* minBlock = *it;
-      ++it;
-      for (auto et = succ_end(&bb);
-          it != et; ++it)
+      for (auto succ : successors(&bb))
       {
-        BasicBlock* s = *it;
-        if (numPaths[s] < numPaths[minBlock])
-        {
-          minBlock = s;
-        }
+        countorder.push(succ);
       }
 
-      if (size_t countdiff = numPaths[&bb] - numPaths[minBlock])
-      {
-        // edge to minBlock = countdiff
-        edges[{&bb, minBlock}] = countdiff;
+      uint64_t nextdiff = numPaths[countorder.top()];
+	  // traverse countorder
+	  if (false == countorder.empty())
+	  {
+	  	countorder.pop(); // never instrument the successor of max path count
+	  }
+	  while (!countorder.empty())
+	  {
+	    BasicBlock* minBlock = countorder.top();
+	    countorder.pop();
 
-        IRBuilder<> builder(minBlock->getFirstNonPHI());
-        auto* incr = ConstantInt::get(int64Ty, countdiff, false);
-        auto* gep = builder.CreateInBoundsGEP(int64Ty, id, zero);
-        auto* temp = builder.CreateAlignedLoad(gep, 8);
-        auto* add = builder.CreateNSWAdd(temp, incr);
-        builder.CreateStore(add, gep);
+	    edges[{&bb, minBlock}] = nextdiff;
+	    IRBuilder<> builder(minBlock->getFirstNonPHI());
+	    auto* incr = ConstantInt::get(int64Ty, nextdiff, false);
+	    auto* gep = builder.CreateInBoundsGEP(int64Ty, id, zero);
+	    auto* temp = builder.CreateAlignedLoad(gep, 8);
+	    auto* add = builder.CreateNSWAdd(temp, incr);
+	    builder.CreateStore(add, gep);
+
+        nextdiff += numPaths[minBlock];
       }
     }
   }

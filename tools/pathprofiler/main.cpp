@@ -270,6 +270,7 @@ instrumentModule(Module& module, std::string, const char* argv0) {
   libPaths.push_back(CMAKE_TEMP_LIBRARY_PATH);
 #endif
   libraries.push_back(RUNTIME_LIB);
+  //todo: OS dependent?
 //  libraries.push_back("rt");
 
   saveModule(module, outFile + ".pathprofiler.bc");

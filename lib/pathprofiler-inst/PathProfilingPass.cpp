@@ -36,7 +36,6 @@ PathProfilingPass::runOnModule(llvm::Module &module) {
       nentries += instrument(module, f, nentries);
     }
   }
-  ++nentries;
   std::vector<Constant*> paths;
   for (size_t i = 0; i < nentries; i++)
   {
@@ -74,7 +73,7 @@ PathProfilingPass::instrument(llvm::Module& module,
     return 0;
   }
 
-  llvm::Value* id = nullptr;
+  llvm::Instruction* id = nullptr;
   auto* voidTy = Type::getVoidTy(function.getContext());
   auto* int64Ty = Type::getInt64Ty(function.getContext());
   llvm::ConstantInt* funcId = llvm::ConstantInt::get(int64Ty, functionID, false);
@@ -112,7 +111,16 @@ PathProfilingPass::instrument(llvm::Module& module,
   // step 2: instrument
   for (llvm::BasicBlock* bb : terms)
   {
-    IRBuilder<> builder(bb->getFirstNonPHI());
+    Instruction* inst = bb->getFirstNonPHI();
+    if (&entry == bb)
+	{
+	  // take the third instruction below id
+	  Instruction* gep = entry.getInstList().getNext(id);
+	  Instruction* store = entry.getInstList().getNext(gep);
+	  inst = entry.getInstList().getNext(store);
+	}
+
+    IRBuilder<> builder(inst);
     auto* gep = builder.CreateInBoundsGEP(int64Ty, id, ConstantInt::get(int64Ty, 0));
     auto* temp = builder.CreateAlignedLoad(gep, 8);
     builder.CreateCall(countfunc, {funcId, temp});
