@@ -130,7 +130,7 @@ ProfileDecodingPass::decode(llvm::Function* function, uint64_t pathID) {
     std::function<bool(BasicBlock*, BasicBlock*)> > countorder(
     [&CFG](BasicBlock* lhs, BasicBlock* rhs) -> bool
     {
-        return CFG[lhs] > CFG[rhs];
+        return CFG[lhs] < CFG[rhs];
     });
 
   // propagate through CFG, decrement pathID to 0

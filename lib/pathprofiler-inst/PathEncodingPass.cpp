@@ -8,6 +8,7 @@
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 #include "PathEncodingPass.h"
 
@@ -16,8 +17,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <queue>
-// todo: remove
-#include <iostream>
 
 
 using namespace llvm;
@@ -26,6 +25,23 @@ using namespace pathprofiling;
 
 namespace pathprofiling {
   char PathEncodingPass::ID = 0;
+}
+
+
+inline bool
+isCritical(BasicBlock* bb) {
+	uint64_t pcount = 0, scount = 0;
+	for (auto it = pred_begin(bb), et = pred_end(bb);
+	  it != et; ++it)
+	{
+		pcount++;
+	}
+	for (auto it = succ_begin(bb), et = succ_end(bb);
+	  it != et; ++it)
+	{
+		scount++;
+	}
+	return pcount > 1 && scount > 1;
 }
 
 
@@ -95,8 +111,6 @@ bool pathprofiling::countPaths (llvm::DenseMap<llvm::BasicBlock*, uint64_t>& out
       }
     }
   }
-//for (auto& bb : function) { std::cout << out[&bb] << " "; }
-//std::cout << "\n";
   return backedged;
 }
 
@@ -145,9 +159,10 @@ PathEncodingPass::encode(llvm::Function& function) {
      std::function<bool(BasicBlock*, BasicBlock*)> > countorder(
      [this](BasicBlock* lhs, BasicBlock* rhs) -> bool
 	 {
-	   return numPaths[lhs] > numPaths[rhs];
+	   return numPaths[lhs] < numPaths[rhs];
 	 });
 
+  std::unordered_set<BasicBlock*> instrumented;
   // encode by topographical order to ensure deterministic decoding
   for (auto& bb : function)
   {
@@ -156,7 +171,10 @@ PathEncodingPass::encode(llvm::Function& function) {
       // get the successor of minimum number of paths
       for (auto succ : successors(&bb))
       {
-        countorder.push(succ);
+      	if (instrumented.end() == instrumented.find(succ))
+      	{
+      	  countorder.push(succ);
+		}
       }
 
       uint64_t nextdiff = numPaths[countorder.top()];
@@ -169,6 +187,13 @@ PathEncodingPass::encode(llvm::Function& function) {
 	  {
 	    BasicBlock* minBlock = countorder.top();
 	    countorder.pop();
+	    uint64_t pathCount = numPaths[minBlock];
+	    if (isCritical(&bb))
+		{
+		  minBlock = SplitEdge(&bb, minBlock);
+		}
+
+	    instrumented.insert(minBlock);
 
 	    edges[{&bb, minBlock}] = nextdiff;
 	    IRBuilder<> builder(minBlock->getFirstNonPHI());
@@ -178,7 +203,7 @@ PathEncodingPass::encode(llvm::Function& function) {
 	    auto* add = builder.CreateNSWAdd(temp, incr);
 	    builder.CreateStore(add, gep);
 
-        nextdiff += numPaths[minBlock];
+        nextdiff += pathCount;
       }
     }
   }
