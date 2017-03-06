@@ -29,14 +29,14 @@ namespace pathprofiling {
 
 
 inline bool
-isCritical(BasicBlock* bb) {
+isCritical(BasicBlock* prev, BasicBlock* next) {
 	uint64_t pcount = 0, scount = 0;
-	for (auto it = pred_begin(bb), et = pred_end(bb);
+	for (auto it = pred_begin(next), et = pred_end(next);
 	  it != et; ++it)
 	{
 		pcount++;
 	}
-	for (auto it = succ_begin(bb), et = succ_end(bb);
+	for (auto it = succ_begin(prev), et = succ_end(prev);
 	  it != et; ++it)
 	{
 		scount++;
@@ -162,7 +162,6 @@ PathEncodingPass::encode(llvm::Function& function) {
 	   return numPaths[lhs] < numPaths[rhs];
 	 });
 
-  std::unordered_set<BasicBlock*> instrumented;
   // encode by topographical order to ensure deterministic decoding
   for (auto& bb : function)
   {
@@ -171,10 +170,7 @@ PathEncodingPass::encode(llvm::Function& function) {
       // get the successor of minimum number of paths
       for (auto succ : successors(&bb))
       {
-      	if (instrumented.end() == instrumented.find(succ))
-      	{
-      	  countorder.push(succ);
-		}
+        countorder.push(succ);
       }
 
       uint64_t nextdiff = numPaths[countorder.top()];
@@ -188,12 +184,10 @@ PathEncodingPass::encode(llvm::Function& function) {
 	    BasicBlock* minBlock = countorder.top();
 	    countorder.pop();
 	    uint64_t pathCount = numPaths[minBlock];
-	    if (isCritical(&bb))
+	    if (isCritical(&bb, minBlock))
 		{
 		  minBlock = SplitEdge(&bb, minBlock);
 		}
-
-	    instrumented.insert(minBlock);
 
 	    edges[{&bb, minBlock}] = nextdiff;
 	    IRBuilder<> builder(minBlock->getFirstNonPHI());
