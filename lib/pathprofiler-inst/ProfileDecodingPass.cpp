@@ -104,12 +104,15 @@ ProfileDecodingPass::runOnModule(Module &module) {
   for (uint64_t i = 0; i < N; ++i)
   {
     DUAL& d = topN[i];
-    std::pair<Function*, uint64_t> params = fencoding[d.first];
-    std::vector<llvm::BasicBlock*> sequence = decode(params.first, params.second);
+    if (d.second)
+    {
+	  std::pair<Function*, uint64_t> params = fencoding[d.first];
+	  std::vector<llvm::BasicBlock*> sequence = decode(params.first, params.second);
 
-    out << d.second << ", " << params.first->getName();
-    printPath(out, sequence);
-    out << "\n";
+  	  out << d.second << ", " << params.first->getName();
+	  printPath(out, sequence);
+	  out << "\n";
+    }
   }
 
   return true;
